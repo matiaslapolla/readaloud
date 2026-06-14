@@ -1,0 +1,72 @@
+---
+name: read-aloud
+description: Read the previous assistant response aloud using macOS text-to-speech. Use when the user types /read-aloud, or asks to "read that out loud", "say it", "speak the last response", or wants a prompt/standup/answer narrated while they do something else. Supports "stop" to cancel narration.
+---
+
+# read-aloud
+
+Speak the **previous assistant message** (or a file) aloud. This skill drives the
+`readaloud` app — a TUI/daemon that owns the TTS engines and a warm Kokoro model.
+The companion client pulls the last text response straight from the live session
+transcript, so the user does not need to paste or re-type anything.
+
+- Reads are served by a warm core over a socket — either the `readaloud` TUI (if
+  open) or a headless **daemon**. Audio plays from that process, so it survives the
+  harness. The reply says `[warm]`.
+- If nothing is running yet, the first `read` **lazily spawns the daemon** (one-time
+  ~8–13s Kokoro load), then stays resident → every read after is sub-second. The
+  daemon idle-shuts-down after ~30 min unused. The old prototype script is now only a
+  last-ditch fallback if the daemon can't come up.
+
+## How to run it
+
+Do this with **no preamble text** — the very first thing in your turn must be the Bash
+call below. Emitting text first would make *your current message* the "last response"
+and it would read itself back. Just run the command.
+
+Entry point (absolute path — the skill shell has no zsh aliases):
+`__READALOUD_BIN__`
+
+- Read last response: `__READALOUD_BIN__ read`
+- Read a file: `__READALOUD_BIN__ read "<path>"`
+  (use when the user names a file/doc to narrate, e.g. "read aloud spec.md".
+  Quote the path; `~` is supported; relative paths resolve from the project dir.)
+  IMPORTANT: if the user references the file with an `@`-mention (e.g.
+  `@clipchum/.claude/prompts/foo.md`), the harness expands that into the file's
+  *contents*, NOT a path — so you must pass the **literal file path** as the
+  argument (drop the `@`), e.g.
+  `__READALOUD_BIN__ read "clipchum/.claude/prompts/foo.md"`.
+  Do not paste the file contents into the command.
+- Stop playback: `__READALOUD_BIN__ stop`
+  (use when the user says "stop", "quiet", "cancel reading")
+- Check what's playing / queued: `__READALOUD_BIN__ status`
+
+The command prints a one-line status. Relay it tersely (e.g. "▶️ Reading the last
+response aloud (kokoro · af_heart) [warm].") Do not re-narrate the content yourself.
+
+## Engine & voice
+
+When the **TUI is running**, engine/voice/speed come from its config + Voice Lab
+(the user picks them live); the env vars below are ignored on the warm path.
+
+When **cold-starting** (no app), the prototype chain applies and env vars work as
+before:
+- **kokoro** (default): fully **local/offline** neural model (private). ~8–13s to
+  first audio (loads the model per run). Needs `uv` + a one-time model download.
+- **edge**: Microsoft neural voices. Natural, free, **needs internet**; ~2–3s to
+  first audio. Text is sent to Microsoft.
+- **say**: macOS built-in, offline, robotic. Automatic fallback if kokoro/edge fail.
+
+- Pick engine (cold path): `READ_ALOUD_ENGINE=edge __READALOUD_BIN__ read`
+- Pin a voice: kokoro `READ_ALOUD_VOICE=af_heart` (Spanish `ef_dora`); edge
+  `READ_ALOUD_VOICE=en-US-AvaMultilingualNeural`; say `READ_ALOUD_VOICE="Evan (Enhanced)"`.
+- Speed: `READ_ALOUD_EDGE_RATE=+15%` (edge) or `READ_ALOUD_RATE=240` (say, wpm).
+
+## Notes
+
+- Code fences and inline code are stripped before speaking, so code blocks are
+  skipped rather than read symbol-by-symbol.
+- Narration runs in the background; the session stays responsive and a new
+  `/read-aloud` interrupts the prior one (warm: barge-in; cold: the script stops + restarts).
+- The user can also drive the app directly in a terminal: `readaloud` opens the TUI;
+  `readaloud read` / `readaloud stop` are the same quick commands this skill uses.
