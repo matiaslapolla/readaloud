@@ -22,3 +22,9 @@ target/
 *.mp3
 *.wav
 readaloud*.tmp/
+
+# User config (live; committed template is config.example.toml)
+/config.toml
+
+# Python packaging
+*.egg-info/

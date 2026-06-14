@@ -1,0 +1,97 @@
+Screen {
+    background: $surface;
+}
+
+#main {
+    height: 1fr;
+}
+
+#engines-pane {
+    width: 34;
+    border: round $primary;
+    margin: 0 0 0 1;
+}
+
+#voices-pane {
+    width: 1fr;
+    border: round $primary;
+    margin: 0 1;
+}
+
+.pane-title {
+    padding: 0 1;
+    color: $accent;
+    text-style: bold;
+}
+
+#engines {
+    height: 1fr;
+    background: $surface;
+}
+
+#voices {
+    height: 1fr;
+}
+
+#sample {
+    margin: 0 1;
+}
+
+#actions {
+    height: auto;
+    padding: 1 1 0 1;
+}
+
+#actions Button {
+    margin-right: 2;
+}
+
+#status {
+    padding: 0 1;
+    height: 1;
+    color: $text-muted;
+}
+
+/* ---- Reader screen ---- */
+#reader-main {
+    height: 1fr;
+    margin: 0 1;
+}
+
+#now {
+    padding: 0 1;
+    height: 3;
+    border: round $primary;
+    content-align: left middle;
+}
+
+#watch-row {
+    height: 3;
+    padding: 1 1 0 1;
+}
+
+.inline-label {
+    padding: 1 1 0 0;
+    color: $accent;
+    text-style: bold;
+}
+
+#queue {
+    height: 1fr;
+    border: round $primary;
+}
+
+#reader-actions {
+    height: auto;
+    padding: 1 1 0 1;
+}
+
+#reader-actions Button {
+    margin-right: 2;
+}
+
+#reader-status {
+    padding: 0 1;
+    height: 1;
+    color: $text-muted;
+}
