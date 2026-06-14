@@ -1,0 +1,24 @@
+# OS
+.DS_Store
+
+# Node / TS (if the TUI ends up JS-based)
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+.env
+.env.local
+
+# Python (kokoro engine / if the TUI ends up Python-based)
+.venv/
+__pycache__/
+*.pyc
+.uv/
+
+# Rust / Go (if applicable)
+target/
+
+# Runtime artifacts
+*.mp3
+*.wav
+readaloud*.tmp/
