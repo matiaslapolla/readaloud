@@ -82,8 +82,8 @@ class DaemonClient:
         abspath = os.path.abspath(os.path.expanduser(path))
         return send({"cmd": "read-file", "path": abspath})
 
-    def preview(self, engine: str, voice: str, text: str) -> dict | None:
-        return send({"cmd": "preview", "engine": engine, "voice": voice, "text": text})
+    def preview(self, voice: str, text: str) -> dict | None:
+        return send({"cmd": "preview", "voice": voice, "text": text})
 
     def stop(self) -> dict | None:
         return send({"cmd": "stop"})

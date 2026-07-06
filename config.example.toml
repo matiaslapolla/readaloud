@@ -1,32 +1,9 @@
 # readaloud config — copy to config.toml (gitignored) or just let the app create it.
-# Environment variables (READ_ALOUD_ENGINE / _VOICE / _RATE / _EDGE_RATE) override
-# these at runtime, so the old alias workflow keeps behaving identically.
+# READ_ALOUD_VOICE pins the voice at runtime (shell-alias parity); it wins over
+# default_voice below.
 
-default_engine = "kokoro"   # kokoro (local) | edge (cloud) | say (local)
-allow_edge = true           # privacy: edge sends text to Microsoft's servers
 sample_text = "The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs."
-edge_rate = "+15%"          # edge playback speed
-say_rate = 240              # say words-per-minute
 
-[engines.kokoro]
-enabled = true
+# kokoro is the only engine (local, offline, private).
 default_voice = "af_heart"  # a=US, b=UK; f/m = female/male. Pin an ef_* voice for Spanish.
 voices = ["af_heart", "af_bella", "af_nicole", "am_michael", "am_fenrir", "bf_emma", "bm_george"]
-
-[engines.edge]
-enabled = true
-default_voice = "en-US-AvaMultilingualNeural"  # *Multilingual* voices also read ES/PT
-voices = [
-    "en-US-AvaMultilingualNeural",
-    "en-US-AndrewMultilingualNeural",
-    "en-US-EmmaMultilingualNeural",
-    "en-US-BrianMultilingualNeural",
-    "en-US-AriaNeural",
-    "en-US-GuyNeural",
-    "en-US-JennyNeural",
-]
-
-[engines.say]
-enabled = true
-default_voice = ""          # empty = random from the installed curated pool
-voices = []                 # enumerated live from `say -v '?'`

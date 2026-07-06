@@ -6,12 +6,6 @@ Screen {
     height: 1fr;
 }
 
-#engines-pane {
-    width: 34;
-    border: round $primary;
-    margin: 0 0 0 1;
-}
-
 #voices-pane {
     width: 1fr;
     border: round $primary;
@@ -22,11 +16,6 @@ Screen {
     padding: 0 1;
     color: $accent;
     text-style: bold;
-}
-
-#engines {
-    height: 1fr;
-    background: $surface;
 }
 
 #voices {

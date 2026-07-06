@@ -89,10 +89,8 @@ class IPCServer:
         if cmd == "read-text":
             return self._enqueue(core.read_text_job(req.get("text", "")))
         if cmd == "preview":
-            # Explicit engine+voice from the Voice Lab; barges in over any read.
-            job = core._make_job(
-                req.get("text", ""), "preview", req.get("engine"), req.get("voice")
-            )
+            # Explicit voice from the Voice Lab; barges in over any read.
+            job = core._make_job(req.get("text", ""), "preview", req.get("voice"))
             return self._enqueue(job)
         if cmd == "set-autowatch":
             core.set_autowatch(bool(req.get("on")))
@@ -112,6 +110,7 @@ class IPCServer:
             "engine": job.engine,
             "voice": job.voice,
             "words": job.words,
+            "chunks": job.chunks,
         }
 
     def stop(self) -> None:

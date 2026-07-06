@@ -21,6 +21,7 @@ class ReadJob:
     voice: str
     label: str
     words: int = 0
+    chunks: int = 0  # streaming chunks — the progress denominator
 
 
 class Playlist:

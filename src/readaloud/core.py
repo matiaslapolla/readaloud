@@ -15,13 +15,19 @@ from typing import Callable
 from .config import Config
 from .playlist import Playlist, ReadJob
 from .speech import SpeechService
-from .text import clean_for_speech, word_count
+from .text import chunk_text, clean_for_speech, word_count
 
 
 def _job_brief(job: ReadJob | None) -> dict | None:
     if job is None:
         return None
-    return {"label": job.label, "engine": job.engine, "voice": job.voice, "words": job.words}
+    return {
+        "label": job.label,
+        "engine": job.engine,
+        "voice": job.voice,
+        "words": job.words,
+        "chunks": job.chunks,
+    }
 
 
 class ReadAloudCore:
@@ -53,8 +59,7 @@ class ReadAloudCore:
         cfg = Config.load()
         self.config = cfg
         self.speech.config = cfg
-        for engine in self.speech.engines.values():
-            engine._config = cfg  # type: ignore[attr-defined]
+        self.speech.engine._config = cfg  # type: ignore[attr-defined]
 
     def shutdown(self) -> None:
         self._stop.set()
@@ -85,7 +90,7 @@ class ReadAloudCore:
             pl.preempt.clear()
             self._set_now(job)
             try:
-                self.speech.synth_into_queue(job.engine, job.text, job.voice, cont)
+                self.speech.synth_into_queue(job.text, job.voice, cont)
                 if cont():
                     self.speech.queue.wait_until_idle(cont)
             except Exception:  # noqa: BLE001 — one bad job shouldn't kill the loop
@@ -93,28 +98,18 @@ class ReadAloudCore:
             self._set_now(None)
 
     # ---- job construction (thread-safe; no UI) ----
-    def _resolve_engine(self) -> str:
-        default = self.config.default_engine
-        order = [default] + [n for n in self.config.engine_names() if n != default]
-        for name in order:
-            cfg = self.config.engine(name)
-            if cfg.enabled and self.speech.engines[name].available():
-                return name
-        return "say"  # always available
-
-    def _make_job(
-        self, text: str, label: str, engine: str | None = None, voice: str | None = None
-    ) -> ReadJob | None:
+    def _make_job(self, text: str, label: str, voice: str | None = None) -> ReadJob | None:
         if not text or not text.strip():
             return None
-        engine = engine or self._resolve_engine()
-        voice = self.speech.resolve_voice(engine, voice)
+        voice = self.speech.resolve_voice(voice)
+        spoken = clean_for_speech(text)
         return ReadJob(
             text=text,
-            engine=engine,
+            engine=self.speech.engine.name,
             voice=voice,
             label=label,
-            words=word_count(clean_for_speech(text)),
+            words=word_count(spoken),
+            chunks=len(chunk_text(spoken)),
         )
 
     def read_last_job(self, cwd: str) -> ReadJob | None:
@@ -145,8 +140,8 @@ class ReadAloudCore:
     def read_last(self, cwd: str, interrupt: bool = True) -> ReadJob | None:
         return self.enqueue(self.read_last_job(cwd), interrupt)
 
-    def preview(self, engine: str, voice: str, text: str) -> ReadJob | None:
-        return self.enqueue(self._make_job(text, "preview", engine, voice), True)
+    def preview(self, voice: str, text: str) -> ReadJob | None:
+        return self.enqueue(self._make_job(text, "preview", voice), True)
 
     def stop(self) -> None:
         self.playlist.clear()
@@ -154,10 +149,15 @@ class ReadAloudCore:
 
     def status_dict(self) -> dict:
         now, pending = self.playlist.snapshot()
+        brief = _job_brief(now)
+        if brief is not None:
+            progress = self.speech.queue.progress()
+            if progress:
+                brief = {**brief, **progress}  # live chunk count + authoritative total
         return {
-            "playing": _job_brief(now),
+            "playing": brief,
             "queue": pending,
-            "kokoro": self.speech.engine_state("kokoro").value,
+            "kokoro": self.speech.engine_state().value,
             "autowatch": self._autowatch,
         }
 

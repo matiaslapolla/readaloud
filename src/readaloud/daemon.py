@@ -44,8 +44,8 @@ def run_daemon(argv: list[str] | None = None) -> int:
         core.shutdown()
         return 0
 
-    # Warm Kokoro in the background; the socket answers immediately for edge/say,
-    # and the first kokoro read blocks on the load (shared lock with this warmup).
+    # Warm Kokoro in the background; the socket answers status/stop immediately,
+    # and the first read blocks on the load (shared lock with this warmup).
     threading.Thread(target=core.warm_kokoro, name="warm", daemon=True).start()
 
     for sig in (signal.SIGTERM, signal.SIGINT):

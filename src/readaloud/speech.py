@@ -15,10 +15,10 @@ from pathlib import Path
 from typing import Callable
 
 from .config import Config
-from .engines import build_engines
+from .engines import build_engine
 from .engines.base import EngineState
 from .playback import AudioQueue
-from .text import clean_for_speech
+from .text import chunk_text, clean_for_speech
 
 _TMP_PREFIX = "readaloud."
 _STALE_SECONDS = 30 * 60
@@ -27,30 +27,29 @@ _STALE_SECONDS = 30 * 60
 class SpeechService:
     def __init__(self, config: Config) -> None:
         self.config = config
-        self.engines = build_engines(config)
+        self.engine = build_engine(config)
         self.queue = AudioQueue()
         _sweep_stale_tmp()
         self.tmpdir = Path(tempfile.mkdtemp(prefix=_TMP_PREFIX))
 
     # ---- engine helpers ----
     def warm_kokoro(self) -> None:
-        self.engines["kokoro"].warm()
+        self.engine.warm()
 
-    def engine_state(self, name: str) -> EngineState:
-        return self.engines[name].state()
+    def engine_state(self) -> EngineState:
+        return self.engine.state()
 
-    def resolve_voice(self, engine_name: str, voice: str | None) -> str:
-        """Apply the READ_ALOUD_VOICE pin / engine default when none is given."""
+    def resolve_voice(self, voice: str | None) -> str:
+        """Apply the READ_ALOUD_VOICE pin / configured default when none is given."""
         if voice:
             return voice
         if self.config.pinned_voice:
             return self.config.pinned_voice
-        return self.config.engine(engine_name).default_voice
+        return self.config.default_voice
 
     # ---- synthesis ----
     def synth_into_queue(
         self,
-        engine_name: str,
         text: str,
         voice: str,
         should_continue: Callable[[], bool],
@@ -61,17 +60,22 @@ class SpeechService:
         cooperative cancellation (a fresh speak also bumps the queue epoch, so any
         in-flight chunk is dropped even mid-synth).
         """
-        engine = self.engines[engine_name]
+        engine = self.engine
         spoken = clean_for_speech(text)
         if not spoken.strip():
             return
+        chunks = chunk_text(spoken)
         epoch = self.queue.new_epoch()
+        self.queue.begin(epoch, len(chunks))  # total is the progress denominator
         workdir = self.tmpdir / f"s{epoch}"
         workdir.mkdir(parents=True, exist_ok=True)
-        for path in engine.synth_chunks(spoken, voice, workdir):
+        for i, chunk in enumerate(chunks):
             if not should_continue() or epoch != self.queue.current_epoch:
                 break
-            self.queue.enqueue(epoch, path)
+            for path in engine.synth_chunk(chunk, voice, workdir, i):
+                if not should_continue() or epoch != self.queue.current_epoch:
+                    break
+                self.queue.enqueue(epoch, path, i)
 
     def stop(self) -> None:
         self.queue.interrupt()

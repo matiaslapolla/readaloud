@@ -70,10 +70,13 @@ class Reader(Screen):
     def _fmt_now(now) -> str:
         if not now:
             return "— idle —"
-        return (
+        line = (
             f"▶ {now['label']}   ·   {now['engine']} · {now['voice']}"
             f"   ({now['words']} words)"
         )
+        if now.get("chunks"):
+            line += f"   [{now.get('chunk', 0)}/{now['chunks']}]"
+        return line
 
     # ---- events ----
     def on_switch_changed(self, event: Switch.Changed) -> None:

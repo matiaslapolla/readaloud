@@ -9,7 +9,6 @@ dependencies = [
     "kokoro>=0.9.4",
     "soundfile",
     "numpy",
-    "edge-tts>=7",
     "tomli-w>=1.0",
 ]
 

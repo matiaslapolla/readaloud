@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Iterator
 
 from ..config import Config
-from ..text import chunk_text
 from .base import EngineState, Voice
 
 # kokoro lang codes; a voice name's first letter selects one (a=US, b=UK, e=ES…).
@@ -76,20 +75,17 @@ class KokoroEngine:
 
     # ---- voices ----
     def list_voices(self) -> list[Voice]:
-        cfg = self._config.engine("kokoro")
-        return [Voice(id=v, label=v, note=_VOICE_NOTES.get(v, "")) for v in cfg.voices]
+        return [Voice(id=v, label=v, note=_VOICE_NOTES.get(v, "")) for v in self._config.voices]
 
     # ---- synthesis ----
-    def synth_chunks(self, text: str, voice: str, workdir: Path) -> Iterator[Path]:
+    def synth_chunk(self, chunk: str, voice: str, workdir: Path, seq: int) -> Iterator[Path]:
         import soundfile as sf
 
         lang = voice[0] if voice[:1] in _LANGS else "a"
-        pipe = self._pipeline(lang)
+        pipe = self._pipeline(lang)  # cached per lang — cheap to fetch per chunk
         self._state = EngineState.READY
-        idx = 0
-        for chunk in chunk_text(text):
-            for _, _, audio in pipe(chunk, voice=voice):
-                wav = workdir / f"seg_{idx}.wav"
-                sf.write(str(wav), audio, 24000)
-                yield wav
-                idx += 1
+        # Kokoro splits a chunk into its own segments; they all belong to chunk seq.
+        for sub, (_, _, audio) in enumerate(pipe(chunk, voice=voice)):
+            wav = workdir / f"seg_{seq}_{sub}.wav"
+            sf.write(str(wav), audio, 24000)
+            yield wav

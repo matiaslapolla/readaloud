@@ -19,12 +19,17 @@ from typing import Callable
 
 class AudioQueue:
     def __init__(self, maxsize: int = 4) -> None:
-        # (epoch, path, cleanup)
-        self._q: "queue.Queue[tuple[int, Path, bool] | None]" = queue.Queue(maxsize=maxsize)
+        # (epoch, path, cleanup, chunk_index)
+        self._q: "queue.Queue[tuple[int, Path, bool, int] | None]" = queue.Queue(maxsize=maxsize)
         self._epoch = 0
         self._epoch_lock = threading.Lock()
         self._proc: subprocess.Popen | None = None
         self._proc_lock = threading.Lock()
+        # Progress, tracked at text-chunk granularity for the current read.
+        self._prog_lock = threading.Lock()
+        self._prog_epoch = 0
+        self._total = 0
+        self._playing = -1  # index of the chunk whose audio is on afplay right now
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
@@ -40,6 +45,34 @@ class AudioQueue:
             self._epoch += 1
             return self._epoch
 
+    def begin(self, epoch: int, total: int) -> None:
+        """Register the chunk total for a fresh read so progress has a denominator.
+
+        Called right after new_epoch(), before the first chunk is enqueued.
+        """
+        with self._prog_lock:
+            self._prog_epoch = epoch
+            self._total = total
+            self._playing = -1
+
+    def progress(self) -> "dict | None":
+        """Current read position, or None when idle / between reads.
+
+        `chunk` counts chunks whose playback has started (1..chunks); it reaches
+        `chunks` only once the last chunk is actually playing.
+        """
+        cur = self.current_epoch
+        with self._prog_lock:
+            if self._prog_epoch != cur or self._total <= 0:
+                return None
+            played = min(self._playing + 1, self._total)
+            return {"chunk": max(0, played), "chunks": self._total}
+
+    def _mark_playing(self, epoch: int, chunk_index: int) -> None:
+        with self._prog_lock:
+            if epoch == self._prog_epoch:
+                self._playing = chunk_index
+
     def interrupt(self) -> None:
         """Stop current audio and discard everything still queued."""
         with self._epoch_lock:
@@ -51,7 +84,7 @@ class AudioQueue:
             except queue.Empty:
                 break
             if item is not None:
-                _, path, cleanup = item
+                _, path, cleanup, _ = item
                 if cleanup:
                     _safe_remove(path)
         # Kill whatever is playing.
@@ -59,13 +92,13 @@ class AudioQueue:
             if self._proc and self._proc.poll() is None:
                 self._proc.terminate()
 
-    def enqueue(self, epoch: int, path: Path, cleanup: bool = True) -> None:
+    def enqueue(self, epoch: int, path: Path, chunk_index: int = 0, cleanup: bool = True) -> None:
         """Queue a chunk for playback. Drops it if its epoch is already stale."""
         if epoch != self.current_epoch:
             if cleanup:
                 _safe_remove(path)
             return
-        self._q.put((epoch, path, cleanup))
+        self._q.put((epoch, path, cleanup, chunk_index))
 
     def wait_until_idle(self, should_continue: "Callable[[], bool]", poll: float = 0.1) -> None:
         """Block until nothing is queued or playing (used to read jobs sequentially).
@@ -91,11 +124,12 @@ class AudioQueue:
             item = self._q.get()
             if item is None:
                 continue
-            epoch, path, cleanup = item
+            epoch, path, cleanup, chunk_index = item
             if epoch != self.current_epoch:
                 if cleanup:
                     _safe_remove(path)
                 continue
+            self._mark_playing(epoch, chunk_index)
             try:
                 proc = subprocess.Popen(
                     ["afplay", str(path)],

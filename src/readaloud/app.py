@@ -19,7 +19,7 @@ from textual.app import App
 
 from .client import DaemonClient, ensure_daemon
 from .config import Config
-from .engines import build_engines
+from .engines import build_engine
 from .engines.base import EngineState
 from .screens.reader import Reader
 from .screens.voice_lab import VoiceLab
@@ -40,9 +40,9 @@ class ReadAloudApp(App):
     def __init__(self) -> None:
         super().__init__()
         self.config = Config.load()
-        # Local engines exist only for voice metadata (list_voices / privacy /
+        # A local engine instance exists only for voice metadata (list_voices /
         # availability) — no model load, no audio. The daemon owns synthesis.
-        self.engines = build_engines(self.config)
+        self.engine = build_engine(self.config)
         self.client = DaemonClient()
         self.voice_lab = VoiceLab()
         self.reader = Reader()
@@ -67,23 +67,21 @@ class ReadAloudApp(App):
             return
         if new != self._kokoro_state:
             self._kokoro_state = new
-            self.voice_lab.refresh_engine_states()
+            self.voice_lab.refresh_kokoro_state()
 
     # ---- metadata helpers (local; screens call these) ----
-    def engine_state(self, name: str) -> EngineState:
-        """Daemon truth for kokoro's warm state; local truth for the rest."""
-        if name == "kokoro":
-            if not self.engines["kokoro"].available():
-                return EngineState.UNAVAILABLE
-            return self._kokoro_state
-        return self.engines[name].state()
+    def engine_state(self) -> EngineState:
+        """Daemon truth for kokoro's warm state (unavailable if it can't load)."""
+        if not self.engine.available():
+            return EngineState.UNAVAILABLE
+        return self._kokoro_state
 
-    def resolve_voice(self, engine_name: str, voice: str | None) -> str:
+    def resolve_voice(self, voice: str | None) -> str:
         if voice:
             return voice
         if self.config.pinned_voice:
             return self.config.pinned_voice
-        return self.config.engine(engine_name).default_voice
+        return self.config.default_voice
 
     def save_config(self) -> None:
         """Persist config edits and tell the daemon to pick them up."""
@@ -94,8 +92,8 @@ class ReadAloudApp(App):
     def set_autowatch(self, on: bool) -> None:
         self.client.set_autowatch(on)
 
-    def preview(self, engine: str, voice: str, text: str):
-        return self.client.preview(engine, voice, text)
+    def preview(self, voice: str, text: str):
+        return self.client.preview(voice, text)
 
     def read_last(self, cwd: str, interrupt: bool = True):
         return self.client.read_last(cwd)

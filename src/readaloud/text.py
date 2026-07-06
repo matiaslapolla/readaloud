@@ -1,9 +1,8 @@
 """Text preparation for speech: clean markdown/tags, chunk for streaming.
 
 Ports the proven sanitization from the shell prototype (read-aloud.sh) and the
-chunking from kokoro_synth.py. Gotcha #2 is load-bearing: angle brackets crash
-macOS `say`, so we strip XML/HTML-ish tags and stray `<`/`>` for *every* engine
-(it also reads better on the neural engines).
+chunking from kokoro_synth.py. We strip XML/HTML-ish tags and stray `<`/`>` so the
+markup never gets read aloud — it also reads noticeably better on kokoro.
 """
 from __future__ import annotations
 

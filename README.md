@@ -8,10 +8,8 @@ file) out loud, with natural neural voices — a Textual **TUI** backed by an al
 
 - Reads the **previous assistant response** from the active session's transcript, or a
   **file** you pass it. Strips markdown/code/tags first.
-- Three engines (auto-fallback):
-  - **kokoro** (default) — local/offline neural model, private.
-  - **edge** — Microsoft neural voices (needs internet, faster start).
-  - **say** — macOS built-in (offline, robotic) — last-resort fallback.
+- **Engine**: **kokoro** — a local/offline neural model, private (nothing leaves your
+  machine). It's a hard requirement; if it can't load, reads produce no audio.
 - **Streams**: chunks text at sentence boundaries and plays chunk N while synthesizing
   N+1, so long docs start in seconds.
 - **Always warm**: a headless daemon loads Kokoro once and serves reads over a Unix
@@ -41,27 +39,34 @@ afterwards.
 readaloud                 # open the TUI (Voice Lab, reader, auto-watch)
 readaloud read            # read your last Claude Code response (warm)
 readaloud read ./file.md  # read a file
+readaloud read ./file.md --no-follow   # enqueue and return, no progress bar
 readaloud stop            # stop playback
 readaloud status          # what's playing / queued
 readaloud daemon --stop   # stop the background daemon (also --status)
 ```
 
+From an interactive terminal, `readaloud read` shows a live progress bar that tracks
+playback chunk-by-chunk (`⠹ file.md [██████░░░] 58% 7/12 0:16 kokoro·af_heart`), then a
+`✓` line when it finishes. Ctrl-C just stops watching — the daemon keeps playing, so
+`readaloud stop` is how you silence it. When stdout isn't a TTY (a script, or the
+`/read-aloud` skill), `read` stays fire-and-forget and prints a single line instead.
+
 In Claude Code, the `/read-aloud` skill narrates the previous assistant message through
 the same daemon.
 
-### Voices & speed (cold-path env overrides)
+### Voice (cold-path env override)
 
-`READ_ALOUD_ENGINE` (kokoro|edge|say), `READ_ALOUD_VOICE` (e.g. `af_heart`,
-`en-US-AvaMultilingualNeural`), `READ_ALOUD_EDGE_RATE` (`+15%`), `READ_ALOUD_RATE`
-(say wpm). When the TUI/daemon is running, engine/voice/speed come from the Voice Lab
-and `config.toml` instead.
+`READ_ALOUD_VOICE` pins the kokoro voice (e.g. `af_heart`, `bf_emma`; an `ef_*` voice
+reads Spanish). When the TUI/daemon is running, the voice comes from the Voice Lab and
+`config.toml` instead.
 
 ## Layout
 
 - `src/readaloud/` — the app: `core` (engine + queue), `daemon` (headless warm owner),
   `client`/`cli` (socket client + `readaloud read|stop|status`), `app` + `screens/`
-  (the TUI), `engines/` (kokoro/edge/say), `ipc` (socket protocol).
-- `reference/` — the original shell prototype, still the last-ditch cold fallback.
+  (the TUI), `engines/` (kokoro), `ipc` (socket protocol).
+- `reference/` — the original shell prototype, kept for historical reference (no
+  longer wired in as a fallback; kokoro + the daemon are the only path).
 - `skill/SKILL.md.tmpl` — the Claude Code skill manifest `install.sh` renders.
 - `docs/HANDOFF.md` — design context and the hard-won macOS/TTS gotchas.
 

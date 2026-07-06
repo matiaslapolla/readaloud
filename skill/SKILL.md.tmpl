@@ -46,21 +46,13 @@ response aloud (kokoro · af_heart) [warm].") Do not re-narrate the content your
 
 ## Engine & voice
 
-When the **TUI is running**, engine/voice/speed come from its config + Voice Lab
-(the user picks them live); the env vars below are ignored on the warm path.
+The engine is **kokoro** — a fully **local/offline** neural model (private, nothing
+leaves the machine). The warm daemon keeps it resident so reads are sub-second; the
+first read after boot pays a one-time ~8–13s model load.
 
-When **cold-starting** (no app), the prototype chain applies and env vars work as
-before:
-- **kokoro** (default): fully **local/offline** neural model (private). ~8–13s to
-  first audio (loads the model per run). Needs `uv` + a one-time model download.
-- **edge**: Microsoft neural voices. Natural, free, **needs internet**; ~2–3s to
-  first audio. Text is sent to Microsoft.
-- **say**: macOS built-in, offline, robotic. Automatic fallback if kokoro/edge fail.
-
-- Pick engine (cold path): `READ_ALOUD_ENGINE=edge __READALOUD_BIN__ read`
-- Pin a voice: kokoro `READ_ALOUD_VOICE=af_heart` (Spanish `ef_dora`); edge
-  `READ_ALOUD_VOICE=en-US-AvaMultilingualNeural`; say `READ_ALOUD_VOICE="Evan (Enhanced)"`.
-- Speed: `READ_ALOUD_EDGE_RATE=+15%` (edge) or `READ_ALOUD_RATE=240` (say, wpm).
+When the **TUI is running**, the voice comes from its config + Voice Lab (the user
+picks it live). Otherwise:
+- Pin a voice: `READ_ALOUD_VOICE=af_heart` (Spanish `ef_dora`, UK `bf_emma`).
 
 ## Notes
 

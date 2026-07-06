@@ -10,7 +10,6 @@ from __future__ import annotations
 import copy
 import os
 import tomllib
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -21,52 +20,43 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = PROJECT_ROOT / "config.toml"
 EXAMPLE_PATH = PROJECT_ROOT / "config.example.toml"
 
-# Engine ordering = fallback preference (first available wins when unset).
-ENGINE_ORDER = ("kokoro", "edge", "say")
-
 DEFAULTS: dict[str, Any] = {
-    "default_engine": "kokoro",
-    "allow_edge": True,  # privacy: edge sends text to Microsoft's servers
+    "default_voice": "af_heart",
+    # a=US, b=UK; f/m = female/male. Pin an ef_* voice for Spanish.
+    "voices": [
+        "af_heart",
+        "af_bella",
+        "af_nicole",
+        "am_michael",
+        "am_fenrir",
+        "bf_emma",
+        "bm_george",
+    ],
     "sample_text": "The quick brown fox jumps over the lazy dog. "
     "Pack my box with five dozen liquor jugs.",
-    "edge_rate": "+15%",
-    "say_rate": 240,
-    "engines": {
-        "kokoro": {
-            "enabled": True,
-            "default_voice": "af_heart",
-            # a=US, b=UK; f/m = female/male. Pin an ef_* voice for Spanish.
-            "voices": [
-                "af_heart",
-                "af_bella",
-                "af_nicole",
-                "am_michael",
-                "am_fenrir",
-                "bf_emma",
-                "bm_george",
-            ],
-        },
-        "edge": {
-            "enabled": True,
-            "default_voice": "en-US-AvaMultilingualNeural",
-            # The *Multilingual* voices also read ES/PT well.
-            "voices": [
-                "en-US-AvaMultilingualNeural",
-                "en-US-AndrewMultilingualNeural",
-                "en-US-EmmaMultilingualNeural",
-                "en-US-BrianMultilingualNeural",
-                "en-US-AriaNeural",
-                "en-US-GuyNeural",
-                "en-US-JennyNeural",
-            ],
-        },
-        "say": {
-            "enabled": True,
-            "default_voice": "",  # empty => random from the installed curated pool
-            "voices": [],  # populated live from `say -v '?'`; see engines/say.py
-        },
-    },
 }
+
+# Config keys from the old multi-engine layout, dropped on load so save() won't
+# rewrite them.
+_LEGACY_KEYS = ("default_engine", "allow_edge", "edge_rate", "say_rate")
+
+
+def _migrate_legacy(loaded: dict[str, Any]) -> dict[str, Any]:
+    """Lift voice settings out of the old [engines.kokoro] block, drop dead keys.
+
+    Configs written before kokoro became the only engine nested voices under
+    `engines.kokoro`; keep the user's customizations by lifting them flat.
+    """
+    engines = loaded.pop("engines", None)
+    if isinstance(engines, dict) and isinstance(engines.get("kokoro"), dict):
+        k = engines["kokoro"]
+        if k.get("default_voice"):
+            loaded.setdefault("default_voice", k["default_voice"])
+        if k.get("voices"):
+            loaded.setdefault("voices", k["voices"])
+    for dead in _LEGACY_KEYS:
+        loaded.pop(dead, None)
+    return loaded
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -77,14 +67,6 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
         else:
             out[k] = v
     return out
-
-
-@dataclass
-class EngineConfig:
-    name: str
-    enabled: bool
-    default_voice: str
-    voices: list[str] = field(default_factory=list)
 
 
 class Config:
@@ -99,30 +81,15 @@ class Config:
         data = copy.deepcopy(DEFAULTS)
         if CONFIG_PATH.exists():
             with CONFIG_PATH.open("rb") as fh:
-                data = _deep_merge(data, tomllib.load(fh))
+                loaded = _migrate_legacy(tomllib.load(fh))
+            data = _deep_merge(data, loaded)
         return cls(data)
 
     def save(self) -> None:
         with CONFIG_PATH.open("wb") as fh:
             tomli_w.dump(self._data, fh)
 
-    # ---- top-level accessors (env overrides win) ----
-    @property
-    def default_engine(self) -> str:
-        return os.environ.get("READ_ALOUD_ENGINE") or self._data["default_engine"]
-
-    @default_engine.setter
-    def default_engine(self, value: str) -> None:
-        self._data["default_engine"] = value
-
-    @property
-    def allow_edge(self) -> bool:
-        return bool(self._data["allow_edge"])
-
-    @allow_edge.setter
-    def allow_edge(self, value: bool) -> None:
-        self._data["allow_edge"] = bool(value)
-
+    # ---- accessors (env overrides win) ----
     @property
     def sample_text(self) -> str:
         return self._data["sample_text"]
@@ -132,40 +99,25 @@ class Config:
         self._data["sample_text"] = value
 
     @property
-    def edge_rate(self) -> str:
-        return os.environ.get("READ_ALOUD_EDGE_RATE") or self._data["edge_rate"]
-
-    @property
-    def say_rate(self) -> int:
-        env = os.environ.get("READ_ALOUD_RATE")
-        return int(env) if env else int(self._data["say_rate"])
-
-    @property
     def pinned_voice(self) -> str | None:
-        """READ_ALOUD_VOICE pins a single voice across engines (alias parity)."""
+        """READ_ALOUD_VOICE pins the voice at runtime (shell-alias parity)."""
         return os.environ.get("READ_ALOUD_VOICE") or None
 
-    # ---- per-engine ----
-    def engine(self, name: str) -> EngineConfig:
-        e = self._data["engines"][name]
-        return EngineConfig(
-            name=name,
-            enabled=bool(e.get("enabled", True)),
-            default_voice=e.get("default_voice", ""),
-            voices=list(e.get("voices", [])),
-        )
+    # ---- kokoro voices ----
+    @property
+    def default_voice(self) -> str:
+        return self._data["default_voice"]
 
-    def set_engine_enabled(self, name: str, enabled: bool) -> None:
-        self._data["engines"][name]["enabled"] = bool(enabled)
+    @default_voice.setter
+    def default_voice(self, value: str) -> None:
+        self._data["default_voice"] = value
 
-    def set_engine_default_voice(self, name: str, voice: str) -> None:
-        self._data["engines"][name]["default_voice"] = voice
+    @property
+    def voices(self) -> list[str]:
+        return list(self._data["voices"])
 
-    def set_engine_voices(self, name: str, voices: list[str]) -> None:
-        self._data["engines"][name]["voices"] = list(voices)
-
-    def engine_names(self) -> list[str]:
-        return [n for n in ENGINE_ORDER if n in self._data["engines"]]
+    def set_voices(self, voices: list[str]) -> None:
+        self._data["voices"] = list(voices)
 
     def raw(self) -> dict[str, Any]:
         return self._data
