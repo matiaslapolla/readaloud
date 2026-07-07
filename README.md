@@ -56,8 +56,11 @@ the same daemon.
 
 ### Voice (cold-path env override)
 
-`READ_ALOUD_VOICE` pins the kokoro voice (e.g. `af_heart`, `bf_emma`; an `ef_*` voice
-reads Spanish). When the TUI/daemon is running, the voice comes from the Voice Lab and
+`READ_ALOUD_VOICE` pins the kokoro voice (e.g. `af_heart`, `bf_emma`). Spanish reads
+use kokoro's three Spanish packs (`ef_dora`, `em_alex`, `em_santa`); the `*_latam`
+ids (`ef_dora_latam`, `em_alex_latam`, `em_santa_latam`) re-accent them to
+Latin-American Spanish (seseo + yeísmo) via espeak `es-419`, while the plain ids stay
+Castilian. When the TUI/daemon is running, the voice comes from the Voice Lab and
 `config.toml` instead.
 
 ## Layout

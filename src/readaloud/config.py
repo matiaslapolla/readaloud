@@ -22,7 +22,8 @@ EXAMPLE_PATH = PROJECT_ROOT / "config.example.toml"
 
 DEFAULTS: dict[str, Any] = {
     "default_voice": "af_heart",
-    # a=US, b=UK; f/m = female/male. Pin an ef_* voice for Spanish.
+    # a=US, b=UK, e=ES; f/m = female/male. The *_latam ids re-accent the Spanish
+    # voices to Latin-American Spanish (seseo + yeísmo) via espeak es-419.
     "voices": [
         "af_heart",
         "af_bella",
@@ -31,6 +32,9 @@ DEFAULTS: dict[str, Any] = {
         "am_fenrir",
         "bf_emma",
         "bm_george",
+        "ef_dora_latam",
+        "em_alex_latam",
+        "em_santa_latam",
     ],
     "sample_text": "The quick brown fox jumps over the lazy dog. "
     "Pack my box with five dozen liquor jugs.",

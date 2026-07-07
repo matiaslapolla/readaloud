@@ -17,15 +17,47 @@ from .base import EngineState, Voice
 # kokoro lang codes; a voice name's first letter selects one (a=US, b=UK, e=ES…).
 _LANGS = set("abefhijpz")
 
-_VOICE_NOTES = {
-    "af_heart": "US · female",
-    "af_bella": "US · female",
-    "af_nicole": "US · female",
-    "am_michael": "US · male",
-    "am_fenrir": "US · male",
-    "bf_emma": "UK · female",
-    "bm_george": "UK · male",
+# Pipeline "profiles". A profile is normally just a kokoro lang code, but a profile
+# may append an espeak-ng language override (after a '-') to re-accent that lang.
+# Kokoro hardcodes lang 'e' -> Castilian espeak 'es'; 'e-419' swaps the g2p to
+# 'es-419' (Latin-American Spanish: seseo + yeísmo) while reusing the same voices.
+_ESPEAK_OVERRIDE = {"e-419": "es-419"}
+
+# Curated voices: display id -> (kokoro voice pack, pipeline profile, note).
+# Kokoro ships only three Spanish packs (ef_dora, em_alex, em_santa), all lang 'e';
+# we expose each in two accents by pairing it with the 'e' or 'e-419' profile.
+_VOICE_SPECS: dict[str, tuple[str, str, str]] = {
+    "af_heart": ("af_heart", "a", "US · female"),
+    "af_bella": ("af_bella", "a", "US · female"),
+    "af_nicole": ("af_nicole", "a", "US · female"),
+    "am_michael": ("am_michael", "a", "US · male"),
+    "am_fenrir": ("am_fenrir", "a", "US · male"),
+    "bf_emma": ("bf_emma", "b", "UK · female"),
+    "bm_george": ("bm_george", "b", "UK · male"),
+    # Spanish — Castilian (espeak 'es')
+    "ef_dora": ("ef_dora", "e", "ES · female"),
+    "em_alex": ("em_alex", "e", "ES · male"),
+    "em_santa": ("em_santa", "e", "ES · male"),
+    # Spanish — Latin American (espeak 'es-419'; seseo + yeísmo)
+    "ef_dora_latam": ("ef_dora", "e-419", "LATAM · female"),
+    "em_alex_latam": ("em_alex", "e-419", "LATAM · male"),
+    "em_santa_latam": ("em_santa", "e-419", "LATAM · male"),
 }
+
+_VOICE_NOTES = {vid: spec[2] for vid, spec in _VOICE_SPECS.items()}
+
+
+def _resolve_voice(voice: str) -> tuple[str, str]:
+    """Map a display voice id to (kokoro voice pack, pipeline profile).
+
+    Unknown ids fall back to the old convention: the id is the kokoro voice and
+    its first letter is the lang code (so custom/user voices keep working).
+    """
+    spec = _VOICE_SPECS.get(voice)
+    if spec:
+        return spec[0], spec[1]
+    profile = voice[0] if voice[:1] in _LANGS else "a"
+    return voice, profile
 
 
 class KokoroEngine:
@@ -65,13 +97,20 @@ class KokoroEngine:
         except Exception:
             self._state = EngineState.UNAVAILABLE
 
-    def _pipeline(self, lang: str):
+    def _pipeline(self, profile: str):
         with self._lock:
-            if lang not in self._pipelines:
+            if profile not in self._pipelines:
                 from kokoro import KPipeline  # heavy import — happens once
 
-                self._pipelines[lang] = KPipeline(lang_code=lang)
-            return self._pipelines[lang]
+                base = profile.split("-", 1)[0]  # 'e-419' -> 'e'
+                pipe = KPipeline(lang_code=base)
+                espeak_lang = _ESPEAK_OVERRIDE.get(profile)
+                if espeak_lang:
+                    from misaki.espeak import EspeakG2P
+
+                    pipe.g2p = EspeakG2P(language=espeak_lang)
+                self._pipelines[profile] = pipe
+            return self._pipelines[profile]
 
     # ---- voices ----
     def list_voices(self) -> list[Voice]:
@@ -81,11 +120,11 @@ class KokoroEngine:
     def synth_chunk(self, chunk: str, voice: str, workdir: Path, seq: int) -> Iterator[Path]:
         import soundfile as sf
 
-        lang = voice[0] if voice[:1] in _LANGS else "a"
-        pipe = self._pipeline(lang)  # cached per lang — cheap to fetch per chunk
+        kvoice, profile = _resolve_voice(voice)
+        pipe = self._pipeline(profile)  # cached per profile — cheap to fetch per chunk
         self._state = EngineState.READY
         # Kokoro splits a chunk into its own segments; they all belong to chunk seq.
-        for sub, (_, _, audio) in enumerate(pipe(chunk, voice=voice)):
+        for sub, (_, _, audio) in enumerate(pipe(chunk, voice=kvoice)):
             wav = workdir / f"seg_{seq}_{sub}.wav"
             sf.write(str(wav), audio, 24000)
             yield wav

@@ -5,5 +5,8 @@
 sample_text = "The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs."
 
 # kokoro is the only engine (local, offline, private).
-default_voice = "af_heart"  # a=US, b=UK; f/m = female/male. Pin an ef_* voice for Spanish.
-voices = ["af_heart", "af_bella", "af_nicole", "am_michael", "am_fenrir", "bf_emma", "bm_george"]
+# a=US, b=UK, e=ES; f/m = female/male. The *_latam ids re-accent the Spanish voices
+# (ef_dora / em_alex / em_santa) to Latin-American Spanish (seseo + yeísmo) via espeak
+# es-419. Drop the _latam suffix for Castilian.
+default_voice = "af_heart"
+voices = ["af_heart", "af_bella", "af_nicole", "am_michael", "am_fenrir", "bf_emma", "bm_george", "ef_dora_latam", "em_alex_latam", "em_santa_latam"]
